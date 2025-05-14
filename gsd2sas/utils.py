@@ -60,8 +60,8 @@ def cell_list(x, box, rmax):
         Array of shape (N, 3) with particle positions.
     box : array-like
         Box dimensions. Shape: (3,)
-    rmax : float
-        maximum distance over which to look for a pair
+    rmax : float or array-like
+        Maximum cell size per dimension (scalar or (3,) array).
 
     Returns
     -------
@@ -71,6 +71,8 @@ def cell_list(x, box, rmax):
         (3,) number of cells in each dimension.
     """
     box = np.asarray(box)
+    rmax = np.broadcast_to(rmax, box.shape)
+
     Ncell = np.floor(box / rmax).astype(int)
     Ncell[Ncell < 3] = 3  # Ensure at least 3 cells per dimension
 
@@ -78,7 +80,6 @@ def cell_list(x, box, rmax):
     x_wrapped = np.mod(x, box)
 
     # Scale position to cell index (0-based indexing)
-    scaled = x_wrapped * Ncell / box
-    cell = np.floor(scaled).astype(int)
+    cell = np.floor(x_wrapped * Ncell / box).astype(int)
 
     return cell, Ncell
