@@ -13,7 +13,7 @@ def read_configuration(position_file, frame = 'all'):
     Returns
     -------
     x : np.ndarray
-        Particle positions. Shape: (N, D)
+        Particle positions. Shape: (F, N, 3), where F is the number of frames and N is the number of particles.
     box : np.ndarray
         Box dimensions. Shape: (3,)
     """
@@ -50,3 +50,35 @@ def read_configuration(position_file, frame = 'all'):
 
     return np.array(x), box
             
+def cell_list(x, box, rmax):
+    """
+    Assign particles to 3D spatial cells.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Array of shape (N, 3) with particle positions.
+    box : array-like
+        Box dimensions. Shape: (3,)
+    rmax : float
+        maximum distance over which to look for a pair
+
+    Returns
+    -------
+    cell : np.ndarray
+        index of the cell to which each particle belongs
+    Ncell : np.ndarray
+        (3,) number of cells in each dimension.
+    """
+    box = np.asarray(box)
+    Ncell = np.floor(box / rmax).astype(int)
+    Ncell[Ncell < 3] = 3  # Ensure at least 3 cells per dimension
+
+    # Apply periodic boundary conditions
+    x_wrapped = np.mod(x, box)
+
+    # Scale position to cell index (0-based indexing)
+    scaled = x_wrapped * Ncell / box
+    cell = np.floor(scaled).astype(int)
+
+    return cell, Ncell
