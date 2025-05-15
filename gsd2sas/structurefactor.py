@@ -1,53 +1,34 @@
 import numpy as np
 from utils import cell_list
-from scipy.fft import fftn, fftshift
+from numpy.fft import fftn, fftshift
 from scipy.stats import binned_statistic
 
 def compute_s_3d(x, box, N_grid):
-    """
-    Compute the 3D structure factor S_3 from particle positions using FFT.
-
-    Parameters
-    ----------
-    x : np.ndarray
-        (N, 3) particle positions.
-    box : array-like
-        (3,) simulation box dimensions.
-    N_grid : int
-        Desired number of grid points along the smallest box dimension.
-
-    Returns
-    -------
-    S_3 : np.ndarray
-        3D structure factor on the reciprocal grid.
-    N_grid_vec : np.ndarray
-        Actual number of grid points in each spatial direction.
-    """
-    N = x.shape[0]
+    N = x.shape[1]
     box = np.asarray(box)
 
-    # Compute real-space grid resolution
+    # Determine grid resolution
     L_grid = np.min(box) / N_grid
     N_grid_vec = np.round(box / L_grid).astype(int)
-    L_grid = box / N_grid_vec  # adjust to exact grid spacing
+    L_grid = box / N_grid_vec
 
-    # Use CellList equivalent to bin particles
+    # Get cell indices (zero-based)
     cells, _ = cell_list(x, box, rmax=L_grid)
 
-    # Convert cell subscripts to linear indices
-    lincell = np.ravel_multi_index(
-        (cells[:, 0], cells[:, 1], cells[:, 2]),
-        dims=N_grid_vec
-    )
+    # Convert to linear indices
+    lincell = np.ravel_multi_index((cells[:, 0], cells[:, 1], cells[:, 2]), dims=N_grid_vec, order='F')
 
-    # Histogram to count particles per cell
-    xgrid, _ = np.histogram(lincell, bins=np.arange(np.prod(N_grid_vec) + 1))
-    xgrid = xgrid.reshape(N_grid_vec)
+    # Count number of particles in each cell
+    bins = np.arange(np.prod(N_grid_vec) + 1)
 
+    xgrid, _ = np.histogram(lincell, bins=bins)
+    xgrid_re = xgrid.reshape(N_grid_vec, order='F')  # Match MATLAB reshape
+    #xgrid_re = np.transpose(xgrid_re, (2, 1, 0))  # from (x, y, z) → (z, y, x) for Python
     # FFT and normalize
-    S_3 = np.abs(fftshift(fftn(xgrid)))**2 / N
+    print(N)
+    S_3 = np.abs(fftshift(fftn(xgrid_re)))**2 / N
 
-    return S_3, N_grid_vec
+    return S_3, N_grid_vec, xgrid ,xgrid_re, lincell, bins
 
 def compute_q3_grid(x, box, N_grid):
     """
@@ -105,23 +86,21 @@ def compute_s_1d(x, box, N_grid):
         Centers of q bins (magnitude of wavevector).
     """
     # Compute full 3D structure factor
-    S_3, _ = compute_s_3d(x, box, N_grid)
+    S_3, _ ,_, _,_,_= compute_s_3d(x, box, N_grid)
 
     # Compute reciprocal q-vectors
     q_3_x, q_3_y, q_3_z = compute_q3_grid(x, box, N_grid)
 
     # Compute |q| and flatten
-    q_mag = np.sqrt(q_3_x**2 + q_3_y**2 + q_3_z**2).ravel()
-    S_flat = S_3.ravel()
+    q_1 = np.sqrt(q_3_x**2 + q_3_y**2 + q_3_z**2).ravel()
+    S_3_flat = S_3.ravel()
 
     # Set bin width based on average q-resolution
     dq = np.mean(2 * np.pi / np.array(box))
-    q_edges = np.arange(0, np.max(q_mag) + dq, dq)
+    q_bin = np.arange(0, np.max(q_1) + dq, dq)
+    q_binedge = q_bin[:-1] + dq / 2
 
     # Bin and average S values over spherical shells
-    S_1, _, _ = binned_statistic(q_mag, S_flat, bins=q_edges, statistic='mean')
+    S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_bin, statistic='mean')
 
-    # Compute bin centers
-    q_1_centers = q_edges[:-1] + dq / 2
-
-    return S_1, q_1_centers
+    return S_1, q_bin
