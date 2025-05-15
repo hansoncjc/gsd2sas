@@ -23,6 +23,7 @@ def read_configuration(position_file, frame = 'all'):
         frame_max = np.inf
     else:
         frame_max = frame
+
     frame_count = 0
 
     # Read file
@@ -44,7 +45,7 @@ def read_configuration(position_file, frame = 'all'):
                 positions.append([float(v) for v in pos_line.strip().split()])
 
             x.append(np.array(positions))
-            frame += 1
+            frame_count += 1
 
             _ = f.readline()  # blank line
 
