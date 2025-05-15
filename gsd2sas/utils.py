@@ -66,7 +66,7 @@ def cell_list(x, box, rmax):
 
     Returns
     -------
-    cell : np.ndarray
+    cells : np.ndarray
         index of the cell to which each particle belongs
     Ncell : np.ndarray
         (3,) number of cells in each dimension.
@@ -82,5 +82,6 @@ def cell_list(x, box, rmax):
 
     # Scale position to cell index (0-based indexing)
     cell = np.floor(x_wrapped * Ncell / box).astype(int)
+    cells = np.squeeze(cell)
 
-    return cell, Ncell
+    return cells, Ncell
