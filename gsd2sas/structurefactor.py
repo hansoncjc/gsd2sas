@@ -11,21 +11,15 @@ def compute_s_3d(x, box, N_grid):
     L_grid = np.min(box) / N_grid
     N_grid_vec = np.round(box / L_grid).astype(int)
     L_grid = box / N_grid_vec
-
-    # Get cell indices (zero-based)
     cells, _ = cell_list(x, box, rmax=L_grid)
-
     # Convert to linear indices
     lincell = np.ravel_multi_index((cells[:, 0], cells[:, 1], cells[:, 2]), dims=N_grid_vec, order='F')
 
     # Count number of particles in each cell
     bins = np.arange(np.prod(N_grid_vec) + 1)
-
     xgrid, _ = np.histogram(lincell, bins=bins)
-    xgrid_re = xgrid.reshape(N_grid_vec, order='F')  # Match MATLAB reshape
-    #xgrid_re = np.transpose(xgrid_re, (2, 1, 0))  # from (x, y, z) → (z, y, x) for Python
-    # FFT and normalize
-    print(N)
+    xgrid_re = xgrid.reshape(N_grid_vec, order='F')
+
     S_3 = np.abs(fftshift(fftn(xgrid_re)))**2 / N
 
     return S_3, N_grid_vec
@@ -85,10 +79,10 @@ def compute_s_1d(x, box, N_grid):
     q_1_centers : np.ndarray
         Centers of q bins (magnitude of wavevector).
     """
-    # Compute full 3D structure factor
+    # Compute 3D structure factor
     S_3, _= compute_s_3d(x, box, N_grid)
 
-    # Compute reciprocal q-vectors
+    # Compute q-vectors
     q_3_x, q_3_y, q_3_z = compute_q3_grid(x, box, N_grid)
 
     # Compute |q| and flatten
