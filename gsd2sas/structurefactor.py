@@ -97,10 +97,11 @@ def compute_s_1d(x, box, N_grid):
 
     # Set bin width based on average q-resolution
     dq = np.mean(2 * np.pi / np.array(box))
-    q_bin = np.arange(0, np.max(q_1) + dq, dq)
-    q_binedge = q_bin[:-1] + dq / 2
+    print(dq)
+    q_bin_centers = np.arange(0, np.max(q_1) + dq, dq)
+    q_binedge = np.concatenate([q_bin_centers, [q_bin_centers[-1] + dq]]) - dq / 2
 
     # Bin and average S values over spherical shells
-    S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_bin, statistic='mean')
+    S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='mean')
 
-    return S_1, q_bin
+    return q_bin_centers, S_1
