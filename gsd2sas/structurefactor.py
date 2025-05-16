@@ -28,7 +28,7 @@ def compute_s_3d(x, box, N_grid):
     print(N)
     S_3 = np.abs(fftshift(fftn(xgrid_re)))**2 / N
 
-    return S_3, N_grid_vec, xgrid ,xgrid_re, lincell, bins
+    return S_3, N_grid_vec
 
 def compute_q3_grid(x, box, N_grid):
     """
@@ -86,7 +86,7 @@ def compute_s_1d(x, box, N_grid):
         Centers of q bins (magnitude of wavevector).
     """
     # Compute full 3D structure factor
-    S_3, _ ,_, _,_,_= compute_s_3d(x, box, N_grid)
+    S_3, _= compute_s_3d(x, box, N_grid)
 
     # Compute reciprocal q-vectors
     q_3_x, q_3_y, q_3_z = compute_q3_grid(x, box, N_grid)
