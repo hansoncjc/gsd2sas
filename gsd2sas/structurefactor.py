@@ -1,7 +1,10 @@
 import numpy as np
-from utils import cell_list
+import os
+from utils import cell_list, read_configuration
+from gsdio import extract_positions
 from numpy.fft import fftn, fftshift
 from scipy.stats import binned_statistic
+import gsd.hoomd
 
 def compute_s_3d(x, box, N_grid):
     N = x.shape[1]
@@ -60,6 +63,7 @@ def compute_q3_grid(x, box, N_grid):
     return q3x, q3y, q3z
 
 def compute_s_1d(x, box, N_grid):
+
     """
     Compute 1D radially averaged structure factor S(q) from particle positions.
 
@@ -99,3 +103,27 @@ def compute_s_1d(x, box, N_grid):
     S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='mean')
 
     return q_bin_centers, S_1
+
+class StructureFactor:
+    def __init__(self, gsd_path, N_grid, frame='all'):
+        self.gsd_path = gsd_path
+        self.N_grid = N_grid
+        self.frame = frame
+        self._extract_data()
+
+    def _extract_data(self):
+        self.txt_path = os.path.splitext(self.gsd_path)[0] + '.txt'
+        extract_positions(self.gsd_path, self.txt_path)
+        self.x, self.box = read_configuration(self.txt_path, self.frame)
+
+    def compute_s_3d(self):
+        self.s_3d, _ = compute_s_3d(self.x, self.box, self.N_grid)
+        return self.s_3d
+
+    def compute_s_1d(self):
+        self.q_bin, self.s_1d = compute_s_1d(self.x, self.box, self.N_grid)
+        return self.q_bin, self.s_1d
+
+    def compute_q3_grid(self):
+        self.q3x, self.q3y, self.q3z = compute_q3_grid(self.x, self.box, self.N_grid)
+        return self.q3x, self.q3y, self.q3z
