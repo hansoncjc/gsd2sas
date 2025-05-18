@@ -95,7 +95,6 @@ def compute_s_1d(x, box, N_grid):
 
     # Set bin width based on average q-resolution
     dq = np.mean(2 * np.pi / np.array(box))
-    print(dq)
     q_bin_centers = np.arange(0, np.max(q_1) + dq, dq)
     q_binedge = np.concatenate([q_bin_centers, [q_bin_centers[-1] + dq]]) - dq / 2
 
