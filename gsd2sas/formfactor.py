@@ -26,13 +26,14 @@ class Sphere(FormFactor):
         super().__init__('sphere')
         self.radius = radius
 
-    def shape_name(self):
-        return 'sphere'
+    def shape(self):
+        print(self.type)
+        return self.type
 
-    def Fq(self, q):
+    def Compute_Fq(self, q):
         """Returns the scattering amplitude F(q) for a sphere."""
         return 3 * (np.sin(q * self.radius) - q * self.radius 
                     * np.cos(q * self.radius)) / (q * self.radius)**3
-    def Pq(self, q):
+    def Compute_Pq(self, q):
         """Returns the form factor P(q) for a sphere."""
         return np.abs(self.Fq(q))**2
