@@ -29,11 +29,12 @@ class Intensity(ABC):
         if self.structure_factor is None or self.form_factor is None:
             raise ValueError("Both structure and form factors must be initialized before computing I(q).")
         q, Sq = self.structure_factor.compute_s_1d()
-        Pq = self.form_factor.Pq(q)
+        Pq = self.form_factor.Compute_Pq(q)
         Iq = self.prefactor * Sq * Pq
         return q, Iq
 
 
 class SphereIntensity(Intensity):
     def set_form_factor(self, radius):
+        self.radius = radius
         self.form_factor = Sphere(radius)
