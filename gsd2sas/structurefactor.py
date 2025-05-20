@@ -3,6 +3,7 @@ import os
 from utils import cell_list, read_configuration
 from gsdio import extract_positions
 from numpy.fft import fftn, fftshift
+import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic
 import gsd.hoomd
 
@@ -92,14 +93,18 @@ def compute_s_1d(x, box, N_grid):
     # Compute |q| and flatten
     q_1 = np.sqrt(q_3_x**2 + q_3_y**2 + q_3_z**2).ravel()
     S_3_flat = S_3.ravel()
-
+    print(np.min(q_1), np.max(q_1))
     # Set bin width based on average q-resolution
     dq = np.mean(2 * np.pi / np.array(box))
-    q_bin_centers = np.arange(0, np.max(q_1) + dq, dq)
-    q_binedge = np.concatenate([q_bin_centers, [q_bin_centers[-1] + dq]]) - dq / 2
+    q_binedge = np.arange(np.min(q_1), np.max(q_1) + dq, dq)
+    q_bin_centers = 0.5 * (q_binedge[:-1] + q_binedge[1:])
+
 
     # Bin and average S values over spherical shells
     S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='mean')
+
+    # Compute bin counts
+    bin_counts, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='count')
 
     return q_bin_centers, S_1
 
