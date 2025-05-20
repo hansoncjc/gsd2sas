@@ -25,10 +25,15 @@ class Intensity(ABC):
         """Set self.form_factor in subclass."""
         pass
 
+    @abstractmethod
+    def scale_s_1d(self):
+        """Set self.form_factor in subclass."""
+        pass
+
     def compute_Iq(self):
         if self.structure_factor is None or self.form_factor is None:
             raise ValueError("Both structure and form factors must be initialized before computing I(q).")
-        q, Sq = self.structure_factor.compute_s_1d()
+        q, Sq = self.scale_s_1d()
         Pq = self.form_factor.Compute_Pq(q)
         Iq = self.prefactor * Sq * Pq
         return q, Iq
@@ -36,5 +41,11 @@ class Intensity(ABC):
 
 class SphereIntensity(Intensity):
     def set_form_factor(self, radius):
-        self.radius = radius
+        """Set the form factor for a sphere. radius is in nm."""
+        self.radius = radius * 10 # Convert to angstroms
         self.form_factor = Sphere(radius)
+
+    def scale_s_1d(self):
+        q_unscale, s_1 = self.structure_factor.compute_s_1d()
+        q_scaled = q_unscale / self.radius
+        return q_scaled, s_1
