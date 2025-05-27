@@ -39,14 +39,4 @@ class SphereIntensity(Intensity):
         """Set the form factor for a sphere. radius is in nm."""
         self.radius = radius
         self.form_factor = Sphere(radius)
-    
-class PolydisperseSphereIntensity(Intensity):
-    def set_form_factor(self, mean_radius, std_dev, n_samples=50):
-        self.radius = mean_radius * 10
-        self.form_factor = PolydisperseSphere(mean_radius * 10, std_dev * 10, n_samples)
-
-    def scale_s_1d(self):
-        q_unscale, s_1 = self.structure_factor.compute_s_1d()
-        q_scaled = q_unscale / self.radius
-        return q_scaled, s_1
 
