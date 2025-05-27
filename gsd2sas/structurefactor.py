@@ -82,7 +82,7 @@ def compute_s_1d(x, box, N_grid):
     S_1 : np.ndarray
         1D radially averaged structure factor.
     q_1_centers : np.ndarray
-        Centers of q bins (magnitude of wavevector).
+        Centers of qr bins (magnitude of wavevector, non-dimensional).
     """
     # Compute 3D structure factor
     S_3, _= compute_s_3d(x, box, N_grid)
