@@ -1,7 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from structurefactor import StructureFactor
-from formfactor import Sphere, PolydisperseSphere
+from formfactor import Sphere
+import matplotlib.pyplot as plt
 
 class Intensity(ABC):
     def __init__(self, volume_fraction, sld_sample, sld_solvent):
@@ -31,7 +32,30 @@ class Intensity(ABC):
         qr, Sq = self.structure_factor.compute_s_1d()
         Pq = self.form_factor.Compute_Pq(qr)
         Iq = self.prefactor * Sq * Pq
+        self.Iq = Iq
+        self.qr = qr
         return qr, Iq
+    
+    def plot_Iq(self, q_unit = "angstrom"):
+        """Plot the computed intensity I(q) with appropriate labels."""
+        
+        if not hasattr(self, 'Iq'):
+            self.compute_Iq()
+        
+        if q_unit == "angstrom":
+            q = self.qr / (self.radius * 10)
+            u_label = '$q(\AA^{-1})$'
+        elif q_unit == "nm":
+            q = self.qr / self.radius
+            u_label = '$q(nm^{-1}$)'
+        else:
+            raise ValueError("Unsupported q_unit. Use 'angstrom' or 'nm'.")
+        
+        plt.figure(figsize=(8, 6), dpi=100)
+        plt.loglog(q[3:-1], self.Iq[3:-1], label=f'Intensity I(q)')
+        plt.xlabel(u_label, fontsize=14)
+        plt.ylabel('Intensity(a.u.)', fontsize=14)
+
 
 
 class SphereIntensity(Intensity):
@@ -39,4 +63,3 @@ class SphereIntensity(Intensity):
         """Set the form factor for a sphere. radius is in nm."""
         self.radius = radius
         self.form_factor = Sphere(radius)
-
