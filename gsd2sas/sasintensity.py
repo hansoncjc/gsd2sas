@@ -1,7 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from structurefactor import StructureFactor
-from formfactor import Sphere
+from formfactor import Sphere, PolydisperseSphere
 
 class Intensity(ABC):
     def __init__(self, volume_fraction, sld_sample, sld_solvent):
@@ -25,11 +25,6 @@ class Intensity(ABC):
         """Set self.form_factor in subclass."""
         pass
 
-    @abstractmethod
-    def scale_s_1d(self):
-        """Set self.form_factor in subclass."""
-        pass
-
     def compute_Iq(self):
         if self.structure_factor is None or self.form_factor is None:
             raise ValueError("Both structure and form factors must be initialized before computing I(q).")
@@ -42,10 +37,16 @@ class Intensity(ABC):
 class SphereIntensity(Intensity):
     def set_form_factor(self, radius):
         """Set the form factor for a sphere. radius is in nm."""
-        self.radius = radius * 10 # Convert to angstroms
+        self.radius = radius
         self.form_factor = Sphere(radius)
+    
+class PolydisperseSphereIntensity(Intensity):
+    def set_form_factor(self, mean_radius, std_dev, n_samples=50):
+        self.radius = mean_radius * 10
+        self.form_factor = PolydisperseSphere(mean_radius * 10, std_dev * 10, n_samples)
 
     def scale_s_1d(self):
         q_unscale, s_1 = self.structure_factor.compute_s_1d()
         q_scaled = q_unscale / self.radius
         return q_scaled, s_1
+
