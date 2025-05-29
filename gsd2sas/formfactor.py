@@ -32,9 +32,36 @@ class Sphere(FormFactor):
         print(self.shape)
         return self.shape
 
-    def Compute_Fq(self, qr):
-        """Returns the scattering amplitude F(q) for a sphere, with input of nondimensional qr."""
+    def compute_Fq(self, q, r = 1.0):
+        """
+        Scattering amplitude F(q) of spheres.
+
+        Parameters
+        ----------
+        q : (Nq,) array_like
+            Magnitude of scattering vector in *simulation inverse-length units*.
+        r : float or (Nr,) array_like
+            Sphere radius/radii in *simulation length units, default is 1*.
+
+        Returns
+        -------
+        Fq : ndarray
+            If r is scalar → shape (Nq,);        F(q) for that one radius.
+            If r has length >1 → shape (Nq, Nr); F(q) for every q–radius pair.
+            The second index corresponds to the order of radii in `r`.
+        """
+        q  = np.atleast_1d(q).astype(float)
+        r  = np.atleast_1d(r).astype(float)
+
+        # Outer product gives every qr combination:  shape (Nq, Nr)
+        qr = np.outer(q, r)
+
+        # Compute 3[sin(qr) − qr cos(qr)] / (qr)^3,  with F(0) = 1
         with np.errstate(divide='ignore', invalid='ignore'):
-            Fq = 3 * (np.sin(qr) - qr * np.cos(qr)) / (qr**3)
-            Fq = np.where(qr == 0, 1.0, Fq)  # Define F(0) = 1
-        return Fq
+            Fq = 3 * (np.sin(qr) - qr * np.cos(qr)) / qr**3
+            Fq = np.where(qr == 0, 1.0, Fq)
+
+        # If only one radius was supplied, squeeze to 1-D for convenience
+        if r.size == 1:
+            return Fq.squeeze()      # shape (Nq,)
+        return Fq                    # shape (Nq, Nr)
