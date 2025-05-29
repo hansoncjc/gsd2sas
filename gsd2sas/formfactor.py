@@ -32,7 +32,7 @@ class Sphere(FormFactor):
         print(self.shape)
         return self.shape
 
-    def compute_Fq(self, q, r = 1.0):
+    def Compute_Fq(self, q):
         """
         Scattering amplitude F(q) of spheres.
 
@@ -51,7 +51,7 @@ class Sphere(FormFactor):
             The second index corresponds to the order of radii in `r`.
         """
         q  = np.atleast_1d(q).astype(float)
-        r  = np.atleast_1d(r).astype(float)
+        r  = np.atleast_1d(self.radius).astype(float)
 
         # Outer product gives every qr combination:  shape (Nq, Nr)
         qr = np.outer(q, r)

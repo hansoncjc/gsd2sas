@@ -5,7 +5,7 @@ from formfactor import Sphere
 import matplotlib.pyplot as plt
 
 class Intensity(ABC):
-    def __init__(self, volume_fraction, sld_sample, sld_solvent):
+    def __init__(self, volume_fraction, sld_sample, sld_solvent, types = None):
         self.volume_fraction = volume_fraction
         self.sld_sample = sld_sample
         self.sld_solvent = sld_solvent
@@ -18,8 +18,8 @@ class Intensity(ABC):
         delta_rho = self.sld_sample - self.sld_solvent
         return self.volume_fraction * delta_rho**2
 
-    def set_structure_factor(self, gsd_path, N_grid, frame='all'):
-        self.structure_factor = StructureFactor(gsd_path, N_grid, frame)
+    def set_structure_factor(self, gsd_path, N_grid, types = None, frame='all'):
+        self.structure_factor = StructureFactor(gsd_path, N_grid, types, frame)
 
     @abstractmethod
     def set_form_factor(self, *args, **kwargs):
@@ -61,5 +61,9 @@ class Intensity(ABC):
 class SphereIntensity(Intensity):
     def set_form_factor(self, radius):
         """Set the form factor for a sphere. radius is in nm."""
-        self.radius = radius
+        self.radius = np.array(radius, dtype=float)
+        if self.radius.ndim > 0:
+            self.isPoly = True
+        else:
+            self.isPoly = False
         self.form_factor = Sphere(radius)
