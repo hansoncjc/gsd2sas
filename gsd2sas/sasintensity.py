@@ -2,6 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from structurefactor import StructureFactor
 from formfactor import Sphere
+from utils import _binary_mixture_intensity
 import matplotlib.pyplot as plt
 
 class Intensity(ABC):
@@ -10,7 +11,8 @@ class Intensity(ABC):
         self.sld_sample = sld_sample
         self.sld_solvent = sld_solvent
         self.prefactor = self._compute_prefactor()
-        
+        self.isPoly = types is not None
+        self.types = types
         self.structure_factor = None
         self.form_factor = None
 
@@ -18,23 +20,18 @@ class Intensity(ABC):
         delta_rho = self.sld_sample - self.sld_solvent
         return self.volume_fraction * delta_rho**2
 
-    def set_structure_factor(self, gsd_path, N_grid, types = None, frame='all'):
-        self.structure_factor = StructureFactor(gsd_path, N_grid, types, frame)
+    def set_structure_factor(self, gsd_path, N_grid, types = None, frames='all'):
+        self.structure_factor = StructureFactor(gsd_path, N_grid, types, frames)
 
     @abstractmethod
     def set_form_factor(self, *args, **kwargs):
         """Set self.form_factor in subclass."""
         pass
 
+    @abstractmethod
     def compute_Iq(self):
-        if self.structure_factor is None or self.form_factor is None:
-            raise ValueError("Both structure and form factors must be initialized before computing I(q).")
-        qr, Sq = self.structure_factor.compute_s_1d()
-        Pq = self.form_factor.Compute_Pq(qr)
-        Iq = self.prefactor * Sq * Pq
-        self.Iq = Iq
-        self.qr = qr
-        return qr, Iq
+        """Compute the intensity I(q) based on structure and form factors."""
+        pass
     
     def plot_Iq(self, q_unit = "angstrom"):
         """Plot the computed intensity I(q) with appropriate labels."""
@@ -67,3 +64,30 @@ class SphereIntensity(Intensity):
         else:
             self.isPoly = False
         self.form_factor = Sphere(radius)
+
+    def compute_Iq(self):
+        """Compute the intensity I(q) for spherical particles."""
+        if self.isPoly:
+            if self.structure_factor is None or self.form_factor is None:
+                raise ValueError("Both structure and form factors must be initialized before computing I(q).")
+            if len(self.radius) != 2:
+                raise NotImplementedError("Only 1 or 2 radii supported for now.")
+            q, Sq = self.structure_factor.compute_s_1d()
+            Pq = self.form_factor.Compute_Pq(q)
+            Iq = self.prefactor * Sq * Pq
+            self.Iq = Iq
+            self.q = q
+            return q, Iq
+        else:
+            if self.structure_factor is None or self.form_factor is None:
+                raise ValueError("Both structure and form factors must be initialized before computing I(q).")
+            q, S11, S22, S12 = self.structure_factor.compute_partial_s_1d()
+            P = self.form_factor.Compute_Pq(q)
+            P1, P2 = P.T        # unpack columns
+
+            # 3. mix them
+            I_mix = _binary_mixture_intensity(q, S11, S22, S12, P1, P2, self.types)
+
+            self.Iq = self.prefactor * I_mix
+            self.q  = q
+            return q, self.Iq

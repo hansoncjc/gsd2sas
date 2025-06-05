@@ -1,55 +1,47 @@
 import numpy as np
 
-def read_configuration(position_file, frame = 'all'):
+def read_configuration(position_file, frames = 'all'):
     """
-    Read the configuration from a text file created by io.extract_position.
-
     Parameters
     ----------
-    position_file : str
-        Path to the position file.
-    frame : int or str, optional
-        Total frame number to read starting from frame 0. If 'all', read all frames. Default is 'all'.
+    frames : int | Iterable[int] | 'all'
+        Which frame indices to read from the file.
     Returns
     -------
-    x : np.ndarray
-        Particle positions. Shape: (F, N, 3), where F is the number of frames and N is the number of particles.
-    box : np.ndarray
-        Box dimensions. Shape: (3,)
+    x   : (F, N, 3) float64   positions for each requested frame
+    box : (F, 3)     float64   box lengths for each frame
     """
     
-    # Set frame_max
-    if frame == 'all':
-        frame_max = np.inf
-    else:
-        frame_max = frame
+    if frames == 'all':
+        read_all = True
+        target = None
+    elif isinstance(frames, int):
+        read_all = False
+        target = {frames}
+    else:                           # iterable of ints
+        read_all = False
+        target = set(frames)
 
-    frame_count = 0
 
-    # Read file
-    x = []
-    with open(position_file, 'r') as f:
-        while frame_count < frame_max:
-            line = f.readline()
-            if not line:
+    x_list, box_list = [], []
+    with open(position_file) as f:
+        frame_idx = 0
+        while True:
+            first = f.readline()
+            if not first: break
+            N     = int(first)
+            box   = np.fromstring(f.readline(), sep=' ')
+            pos   = np.fromfile(f, count=3*N, sep=' ').reshape(N,3)
+            #_     = f.readline()            # blank line
+            #_     = f.readline()            # blank line
+
+            if read_all or frame_idx in target:
+                x_list.append(pos.copy())
+                box_list.append(box.copy())
+            frame_idx += 1
+            if not read_all and frame_idx > max(target):
                 break
-
-            N = int(line.strip())
-            box = np.fromstring(f.readline().strip(), sep=' ')
-            positions = []
-
-            for _ in range(N):
-                pos_line = f.readline()
-                if not pos_line:
-                    break
-                positions.append([float(v) for v in pos_line.strip().split()])
-
-            x.append(np.array(positions))
-            frame_count += 1
-
-            _ = f.readline()  # blank line
-
-    return np.array(x), box
+    return np.stack(x_list), np.stack(box_list)
             
 def cell_list(x, box, rmax):
     """
@@ -85,3 +77,29 @@ def cell_list(x, box, rmax):
     cells = np.squeeze(cell)
 
     return cells, Ncell
+
+def _binary_mixture_intensity(q, S11, S22, S12, P1, P2, types):
+    """
+    I(q) for a binary mixture of spheres.
+
+    Parameters
+    ----------
+    q      : (Nq,)         q-grid from StructureFactor
+    S11    : (Nq,)         partial S(q) for type-1–type-1
+    S22    : (Nq,)         partial S(q) for type-2–type-2
+    S12    : (Nq,)         partial S(q) for type-1–type-2
+    P1,P2  : (Nq,)         sphere form factors for radii R1,R2
+    types  : (N,) int      0/1 array of particle types
+
+    Returns
+    -------
+    I : (Nq,) ndarray
+        Scattering intensity before the contrast/volume prefactor.
+    """
+    x2 = np.mean(types == types.max())       # mole fraction of species 2
+    x1 = 1.0 - x2
+
+    I  = (x2 * S22 * P2**2
+         + x1 * S11 * P1**2
+         + 2 * np.sqrt(x1 * x2) * S12 * P1 * P2)
+    return I

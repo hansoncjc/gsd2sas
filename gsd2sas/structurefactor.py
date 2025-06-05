@@ -28,6 +28,46 @@ def compute_s_3d(x, box, N_grid):
 
     return S_3, N_grid_vec
 
+def compute_partial_s_3d(x, types, box, N_grid):
+    N = x.shape[1]
+    box = np.asarray(box)
+
+    L_grid = np.min(box) / N_grid
+    N_grid_vec = np.round(box / L_grid).astype(int)
+    L_grid = box / N_grid_vec
+
+    # Cell list for all particles
+    cells, _ = cell_list(x, box, rmax=L_grid)
+    lincell = np.ravel_multi_index((cells[:, 0], cells[:, 1], cells[:, 2]), dims=N_grid_vec, order='F')
+
+    # Split by type
+    mask1 = types == 0
+    mask2 = types == 1
+    lincell_1 = lincell[mask1]
+    lincell_2 = lincell[mask2]
+
+    bins = np.arange(np.prod(N_grid_vec) + 1)
+
+    # Histogram for each type
+    xgrid_1, _ = np.histogram(lincell_1, bins=bins)
+    xgrid_2, _ = np.histogram(lincell_2, bins=bins)
+
+    xgrid_1 = xgrid_1.reshape(N_grid_vec, order='F')
+    xgrid_2 = xgrid_2.reshape(N_grid_vec, order='F')
+
+    N1 = np.sum(mask1)
+    N2 = np.sum(mask2)
+
+    E1 = fftshift(fftn(xgrid_1))
+    E2 = fftshift(fftn(xgrid_2))
+
+    S_3_11 = np.abs(E1)**2 / N1
+    S_3_22 = np.abs(E2)**2 / N2
+    S_3_12 = (E1 * np.conj(E2)).real / np.sqrt(N1 * N2)
+
+    return S_3_11, S_3_22, S_3_12, N_grid_vec
+
+
 def compute_q3_grid(x, box, N_grid):
     """
     Compute the 3D grid of q-vectors for a given configuration.
@@ -103,30 +143,110 @@ def compute_s_1d(x, box, N_grid):
     # Bin and average S values over spherical shells
     S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='mean')
 
-    # Compute bin counts
-    bin_counts, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='count')
+    num_i, _, _  = binned_statistic(q_1, S_3_flat, bins=q_binedge,
+                                    statistic='sum')
+    cnt_i, _, _  = binned_statistic(q_1, S_3_flat, bins=q_binedge,
+                                    statistic='count')
+    return q_bin_centers, num_i, cnt_i
 
-    return q_bin_centers, S_1
+def compute_partial_s_1d(x, types, box, N_grid):
+    """
+    Compute 1D radially averaged partial structure factors S_11(q), S_22(q), S_12(q)
+    from particle positions and types.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        (N, 3) particle positions.
+    types : np.ndarray
+        (N,) array of particle types (e.g., 0 and 1).
+    box : array-like
+        (3,) simulation box dimensions.
+    N_grid : int
+        Number of grid points in the smallest box dimension.
+
+    Returns
+    -------
+    q_bin_centers : np.ndarray
+        Centers of q bins (|q| magnitudes).
+    S_11_1d, S_22_1d, S_12_1d : np.ndarray
+        Radially averaged partial structure factors.
+    """
+    # Compute 3D partial structure factors
+    S_3_11, S_3_22, S_3_12, _ = compute_partial_s_3d(x, types, box, N_grid)
+
+    # Compute q-vectors
+    q_3_x, q_3_y, q_3_z = compute_q3_grid(x, box, N_grid)
+
+    # Compute |q| and flatten
+    q_1 = np.sqrt(q_3_x**2 + q_3_y**2 + q_3_z**2).ravel()
+    S_3_11_flat = S_3_11.ravel()
+    S_3_22_flat = S_3_22.ravel()
+    S_3_12_flat = S_3_12.ravel()
+
+    # Bin edges based on average dq
+    dq = np.mean(2 * np.pi / np.array(box))
+    q_binedge = np.arange(np.min(q_1), np.max(q_1) + dq, dq)
+    q_bin_centers = 0.5 * (q_binedge[:-1] + q_binedge[1:])
+
+    # Bin and average
+    S_11_1d, _, _ = binned_statistic(q_1, S_3_11_flat, bins=q_binedge, statistic='mean')
+    S_22_1d, _, _ = binned_statistic(q_1, S_3_22_flat, bins=q_binedge, statistic='mean')
+    S_12_1d, _, _ = binned_statistic(q_1, S_3_12_flat, bins=q_binedge, statistic='mean')
+
+    return q_bin_centers, S_11_1d, S_22_1d, S_12_1d
 
 class StructureFactor:
-    def __init__(self, gsd_path, N_grid, frame='all'):
+    def __init__(self, gsd_path, N_grid, types = None, frames='all'):
         self.gsd_path = gsd_path
         self.N_grid = N_grid
-        self.frame = frame
+        self.frames = frames
+        self.types = types
         self._extract_data()
 
     def _extract_data(self):
         self.txt_path = os.path.splitext(self.gsd_path)[0] + '.txt'
         extract_positions(self.gsd_path, self.txt_path)
-        self.x, self.box = read_configuration(self.txt_path, self.frame)
+        self.x, self.box = read_configuration(self.txt_path, self.frames)
+
+    def _iter_frames(self, frames=None):
+        """Yield (pos, box) for each requested frame index."""
+        for x_frame, box_frame in zip(self.x, self.box):
+            yield x_frame, box_frame
 
     def compute_s_3d(self):
-        self.s_3d, _ = compute_s_3d(self.x, self.box, self.N_grid)
-        return self.s_3d
+        s_accum, n = None, 0
+        if self.types is None:
+            for x, box in self._iter_frames(self.frames):
+                s_i = compute_s_3d(x, box, self.N_grid)
+                if s_accum is None:
+                    s_accum = np.zeros_like(s_i)
+                s_accum += s_i
+                n += 1
+            return s_accum / n
+        else:
+            self.s_3d_11, self.s_3d_22, self.s_3d_12, _ = compute_partial_s_3d(self.x, self.types, self.box, self.N_grid)
+            return self.s_3d_11, self.s_3d_22, self.s_3d_12
 
     def compute_s_1d(self):
-        self.q_bin, self.s_1d = compute_s_1d(self.x, self.box, self.N_grid)
-        return self.q_bin, self.s_1d
+        num_total, cnt_total = None, None
+        if self.types is None:
+            for x, box in self._iter_frames(self.frames):
+                q, num_i, cnt_i = compute_s_1d(x, box, self.N_grid)
+                if num_total is None:
+                    num_total = np.zeros_like(num_i)
+                    cnt_total = np.zeros_like(cnt_i)
+                num_total += num_i
+                cnt_total += cnt_i
+            S1d = np.divide(num_total, cnt_total,
+                    out=np.zeros_like(num_total),
+                    where=cnt_total > 0)
+            print(f'Total frames processed: {len(self.x)}')
+            return q, S1d
+
+        else:
+            self.q_bin, self.s_11, self.s_22, self.s_12 = compute_partial_s_1d(self.x, self.types, self.box, self.N_grid)
+            return self.q_bin, self.s_11, self.s_22, self.s_12
 
     def compute_q3_grid(self):
         self.q3x, self.q3y, self.q3z = compute_q3_grid(self.x, self.box, self.N_grid)
