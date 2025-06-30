@@ -33,6 +33,7 @@ class Intensity(ABC):
         """Compute the intensity I(q) based on structure and form factors."""
         pass
     
+    '''
     def plot_Iq(self, q_unit = "angstrom"):
         """Plot the computed intensity I(q) with appropriate labels."""
         
@@ -52,6 +53,7 @@ class Intensity(ABC):
         plt.loglog(q[3:-1], self.Iq[3:-1], label=f'Intensity I(q)')
         plt.xlabel(u_label, fontsize=14)
         plt.ylabel('Intensity(a.u.)', fontsize=14)
+    '''
 
 
 
@@ -70,17 +72,6 @@ class SphereIntensity(Intensity):
         if self.isPoly:
             if self.structure_factor is None or self.form_factor is None:
                 raise ValueError("Both structure and form factors must be initialized before computing I(q).")
-            if len(self.radius) != 2:
-                raise NotImplementedError("Only 1 or 2 radii supported for now.")
-            q, Sq = self.structure_factor.compute_s_1d()
-            Pq = self.form_factor.Compute_Pq(q)
-            Iq = self.prefactor * Sq * Pq
-            self.Iq = Iq
-            self.q = q
-            return q, Iq
-        else:
-            if self.structure_factor is None or self.form_factor is None:
-                raise ValueError("Both structure and form factors must be initialized before computing I(q).")
             q, S11, S22, S12 = self.structure_factor.compute_partial_s_1d()
             P = self.form_factor.Compute_Pq(q)
             P1, P2 = P.T        # unpack columns
@@ -91,3 +82,12 @@ class SphereIntensity(Intensity):
             self.Iq = self.prefactor * I_mix
             self.q  = q
             return q, self.Iq
+        else:
+            if self.structure_factor is None or self.form_factor is None:
+                raise ValueError("Both structure and form factors must be initialized before computing I(q).")
+            q, Sq = self.structure_factor.compute_s_1d()
+            Pq = self.form_factor.Compute_Pq(q)
+            Iq = self.prefactor * Sq * Pq
+            self.Iq = Iq
+            self.q = q
+            return q, Iq
