@@ -203,7 +203,7 @@ def compute_partial_s_1d(x, types, box, N_grid):
     S12_sum, _, _ = binned_statistic(q_1, S_3_12_flat, bins=q_binedge, statistic='sum')
     cnt,     _, _ = binned_statistic(q_1, S_3_11_flat, bins=q_binedge, statistic='count')
 
-    return q_bin_centers, S11_sum, S11_sum, S12_sum, cnt
+    return q_bin_centers, S11_sum, S22_sum, S12_sum, cnt
 
 class StructureFactor:
     def __init__(self, gsd_path, N_grid, types = None, frames='all'):
