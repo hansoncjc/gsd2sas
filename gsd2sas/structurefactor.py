@@ -8,7 +8,9 @@ from scipy.stats import binned_statistic
 import gsd.hoomd
 
 def compute_s_3d(x, box, N_grid):
-    N = x.shape[1]
+    assert x.ndim == 2 and x.shape[1] == 3, f"Expected x=(N,3), got {x.shape}"
+    assert np.shape(box) == (3,), f"Expected box=(3,), got {np.shape(box)}"
+    N = x.shape[0]
     box = np.asarray(box)
 
     # Determine grid resolution
@@ -29,7 +31,9 @@ def compute_s_3d(x, box, N_grid):
     return S_3, N_grid_vec
 
 def compute_partial_s_3d(x, types, box, N_grid):
-    N = x.shape[1]
+    assert x.ndim == 2 and x.shape[1] == 3, f"Expected x=(N,3), got {x.shape}"
+    assert np.shape(box) == (3,), f"Expected box=(3,), got {np.shape(box)}"
+    N = x.shape[0]
     box = np.asarray(box)
 
     L_grid = np.min(box) / N_grid
@@ -143,11 +147,11 @@ def compute_s_1d(x, box, N_grid):
     # Bin and average S values over spherical shells
     S_1, _, _ = binned_statistic(q_1, S_3_flat, bins=q_binedge, statistic='mean')
 
-    num_i, _, _  = binned_statistic(q_1, S_3_flat, bins=q_binedge,
+    num_1, _, _  = binned_statistic(q_1, S_3_flat, bins=q_binedge,
                                     statistic='sum')
-    cnt_i, _, _  = binned_statistic(q_1, S_3_flat, bins=q_binedge,
+    cnt_1, _, _  = binned_statistic(q_1, S_3_flat, bins=q_binedge,
                                     statistic='count')
-    return q_bin_centers, num_i, cnt_i
+    return q_bin_centers, num_1, cnt_1
 
 def compute_partial_s_1d(x, types, box, N_grid):
     """
@@ -194,7 +198,12 @@ def compute_partial_s_1d(x, types, box, N_grid):
     S_22_1d, _, _ = binned_statistic(q_1, S_3_22_flat, bins=q_binedge, statistic='mean')
     S_12_1d, _, _ = binned_statistic(q_1, S_3_12_flat, bins=q_binedge, statistic='mean')
 
-    return q_bin_centers, S_11_1d, S_22_1d, S_12_1d
+    S11_sum, _, _ = binned_statistic(q_1, S_3_11_flat, bins=q_binedge, statistic='sum')
+    S22_sum, _, _ = binned_statistic(q_1, S_3_22_flat, bins=q_binedge, statistic='sum')
+    S12_sum, _, _ = binned_statistic(q_1, S_3_12_flat, bins=q_binedge, statistic='sum')
+    cnt,     _, _ = binned_statistic(q_1, S_3_11_flat, bins=q_binedge, statistic='count')
+
+    return q_bin_centers, S11_sum, S11_sum, S12_sum, cnt
 
 class StructureFactor:
     def __init__(self, gsd_path, N_grid, types = None, frames='all'):
@@ -209,14 +218,15 @@ class StructureFactor:
         extract_positions(self.gsd_path, self.txt_path)
         self.x, self.box = read_configuration(self.txt_path, self.frames)
 
+
     def _iter_frames(self, frames=None):
         """Yield (pos, box) for each requested frame index."""
         for x_frame, box_frame in zip(self.x, self.box):
             yield x_frame, box_frame
 
     def compute_s_3d(self):
-        s_accum, n = None, 0
         if self.types is None:
+            s_accum, n = None, 0
             for x, box in self._iter_frames(self.frames):
                 s_i = compute_s_3d(x, box, self.N_grid)
                 if s_accum is None:
@@ -225,8 +235,19 @@ class StructureFactor:
                 n += 1
             return s_accum / n
         else:
-            self.s_3d_11, self.s_3d_22, self.s_3d_12, _ = compute_partial_s_3d(self.x, self.types, self.box, self.N_grid)
-            return self.s_3d_11, self.s_3d_22, self.s_3d_12
+            s11_accum, s22_accum, s12_accum = None, None, None
+            n = 0
+            for x, box in self._iter_frames(self.frames):
+                s11_i, s22_i, s12_i, _ = compute_partial_s_3d(x, self.types, box, self.N_grid)
+                if s11_accum is None:
+                    s11_accum = np.zeros_like(s11_i)
+                    s22_accum = np.zeros_like(s22_i)
+                    s12_accum = np.zeros_like(s12_i)
+                s11_accum += s11_i
+                s22_accum += s22_i
+                s12_accum += s12_i
+                n += 1
+            return s11_accum / n, s22_accum / n, s12_accum / n
 
     def compute_s_1d(self):
         num_total, cnt_total = None, None
@@ -245,9 +266,42 @@ class StructureFactor:
             return q, S1d
 
         else:
-            self.q_bin, self.s_11, self.s_22, self.s_12 = compute_partial_s_1d(self.x, self.types, self.box, self.N_grid)
+            S11_sum_total = None
+            S22_sum_total = None
+            S12_sum_total = None
+            cnt_total     = None
+            q_bin         = None
+            nframes       = 0
+
+            for x, box in self._iter_frames(self.frames):
+                q, S11_sum_i, S22_sum_i, S12_sum_i, cnt_i = compute_partial_s_1d(
+                    x, self.types, box, self.N_grid
+                )
+                if S11_sum_total is None:
+                    # initialize accumulators on first frame
+                    S11_sum_total = np.zeros_like(S11_sum_i)
+                    S22_sum_total = np.zeros_like(S22_sum_i)
+                    S12_sum_total = np.zeros_like(S12_sum_i)
+                    cnt_total     = np.zeros_like(cnt_i)
+                    q_bin         = q  # keep the bin centers from the first frame
+
+                S11_sum_total += S11_sum_i
+                S22_sum_total += S22_sum_i
+                S12_sum_total += S12_sum_i
+                cnt_total     += cnt_i
+                nframes       += 1
+
+            # safe divide to produce final per-bin averages
+            s11 = np.divide(S11_sum_total, cnt_total, out=np.zeros_like(S11_sum_total), where=cnt_total > 0)
+            s22 = np.divide(S22_sum_total, cnt_total, out=np.zeros_like(S22_sum_total), where=cnt_total > 0)
+            s12 = np.divide(S12_sum_total, cnt_total, out=np.zeros_like(S12_sum_total), where=cnt_total > 0)
+
+            print(f'Total frames processed: {nframes}')
+            self.q_bin, self.s_11, self.s_22, self.s_12 = q_bin, s11, s22, s12
             return self.q_bin, self.s_11, self.s_22, self.s_12
 
-    def compute_q3_grid(self):
-        self.q3x, self.q3y, self.q3z = compute_q3_grid(self.x, self.box, self.N_grid)
+    def compute_q3_grid(self, frame = 0):
+        x0  = self.x[frame]
+        box0 = self.box[frame]
+        self.q3x, self.q3y, self.q3z = compute_q3_grid(x0, box0, self.N_grid)
         return self.q3x, self.q3y, self.q3z
