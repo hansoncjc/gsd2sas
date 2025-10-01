@@ -78,6 +78,9 @@ def cell_list(x, box, rmax):
 
     return cells, Ncell
 
+def load_types(types_file):
+    return np.loadtxt(types_file)
+
 def _binary_mixture_intensity(q, S11, S22, S12, P1, P2, types):
     """
     I(q) for a binary mixture of spheres.
