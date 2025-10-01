@@ -20,7 +20,7 @@ def extract_positions(gsd_file, output_file):
     """
     # Open gsd file
     traj = hoomd.open(name=gsd_file, mode='r')
-    
+    N_frames = 0
     # Save file if 
     if output_file is not None:
         with open(output_file, 'w') as f:
@@ -39,3 +39,6 @@ def extract_positions(gsd_file, output_file):
                 for pos in x:
                     f.write('{:.5f} {:.5f} {:.5f}\n'.format(pos[0], pos[1], pos[2]))
                 f.write('\n')
+                N_frames += 1
+                
+    print(f'Total frames extracted: {N_frames}')
