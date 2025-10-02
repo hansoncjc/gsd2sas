@@ -17,11 +17,11 @@ class Intensity(ABC):
         self.form_factor = None
 
     def _compute_prefactor(self):
-        delta_rho = self.sld_sample - self.sld_solvent
-        return self.volume_fraction * delta_rho**2
+        self.delta_rho = self.sld_sample - self.sld_solvent
+        return self.volume_fraction * self.delta_rho**2
 
-    def set_structure_factor(self, gsd_path, N_grid, types = None, frames='all'):
-        self.structure_factor = StructureFactor(gsd_path, N_grid, types, frames)
+    def set_structure_factor(self, gsd_path, N_grid, frames='all'):
+        self.structure_factor = StructureFactor(gsd_path, N_grid, self.types, frames)
 
     @abstractmethod
     def set_form_factor(self, *args, **kwargs):
@@ -61,10 +61,7 @@ class SphereIntensity(Intensity):
     def set_form_factor(self, radius):
         """Set the form factor for a sphere. radius is in nm."""
         self.radius = np.array(radius, dtype=float)
-        if self.radius.ndim > 0:
-            self.isPoly = True
-        else:
-            self.isPoly = False
+        self.isPoly = (self.radius.ndim) > 0 or (self.types is not None)
         self.form_factor = Sphere(radius)
 
     def compute_Iq(self):
@@ -72,22 +69,57 @@ class SphereIntensity(Intensity):
         if self.isPoly:
             if self.structure_factor is None or self.form_factor is None:
                 raise ValueError("Both structure and form factors must be initialized before computing I(q).")
-            q, S11, S22, S12 = self.structure_factor.compute_partial_s_1d()
-            P = self.form_factor.Compute_Pq(q)
-            P1, P2 = P.T        # unpack columns
+            q, S11, S22, S12 = self.structure_factor.compute_s_1d()
+            F = self.form_factor.Compute_Fq(q)
+            F1, F2 = F.T        # unpack columns
 
-            # 3. mix them
-            I_mix = _binary_mixture_intensity(q, S11, S22, S12, P1, P2, self.types)
+            I_mix = self._binary_mixture_intensity(q, S11, S22, S12, F1, F2)
 
-            self.Iq = self.prefactor * I_mix
+            #self.Iq = self.prefactor * I_mix
             self.q  = q
-            return q, self.Iq
+            self.Iq = I_mix
+            return q, I_mix
         else:
             if self.structure_factor is None or self.form_factor is None:
                 raise ValueError("Both structure and form factors must be initialized before computing I(q).")
             q, Sq = self.structure_factor.compute_s_1d()
             Pq = self.form_factor.Compute_Pq(q)
-            Iq = self.prefactor * Sq * Pq
+            V = 4/3 * np.pi * self.radius**3
+            Iq = self.prefactor * V * Sq * Pq
             self.Iq = Iq
             self.q = q
             return q, Iq
+
+    def _binary_mixture_intensity(self, q, S11, S22, S12, F1, F2):
+        """
+        I(q) for a binary mixture of spheres.
+
+        Parameters
+        ----------
+        q      : (Nq,)         q-grid from StructureFactor
+        S11    : (Nq,)         partial S(q) for type-1–type-1
+        S22    : (Nq,)         partial S(q) for type-2–type-2
+        S12    : (Nq,)         partial S(q) for type-1–type-2
+        F1,F2  : (Nq,)         sphere form factor amplitudes for radii R1,R2
+
+        Returns
+        -------
+        I : (Nq,) ndarray
+            Scattering intensity before the contrast/volume prefactor.
+        """
+        x2 = np.mean(self.types == self.types.max())       # mole fraction of species 2
+        x1 = 1.0 - x2
+
+        V = (4.0/3.0)*np.pi*(self.radius**3)         # (2,)
+        V1, V2 = V
+
+        phi1 = self.volume_fraction * (x1*V1) / (x1*V1 + x2*V2)
+        phi2 = self.volume_fraction * (x2*V2) / (x1*V1 + x2*V2)
+
+        a1 = phi1 * (self.delta_rho**2) * V1
+        a2 = phi2 * (self.delta_rho**2) * V2
+
+        I_mix = (a1 * S11 * (F1**2)
+            + a2 * S22 * (F2**2)
+            + 2.0 * np.sqrt(a1*a2) * S12 * (F1 * F2))
+        return I_mix

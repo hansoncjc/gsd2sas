@@ -81,28 +81,3 @@ def cell_list(x, box, rmax):
 def load_types(types_file):
     return np.loadtxt(types_file)
 
-def _binary_mixture_intensity(q, S11, S22, S12, P1, P2, types):
-    """
-    I(q) for a binary mixture of spheres.
-
-    Parameters
-    ----------
-    q      : (Nq,)         q-grid from StructureFactor
-    S11    : (Nq,)         partial S(q) for type-1–type-1
-    S22    : (Nq,)         partial S(q) for type-2–type-2
-    S12    : (Nq,)         partial S(q) for type-1–type-2
-    P1,P2  : (Nq,)         sphere form factors for radii R1,R2
-    types  : (N,) int      0/1 array of particle types
-
-    Returns
-    -------
-    I : (Nq,) ndarray
-        Scattering intensity before the contrast/volume prefactor.
-    """
-    x2 = np.mean(types == types.max())       # mole fraction of species 2
-    x1 = 1.0 - x2
-
-    I  = (x2 * S22 * P2**2
-         + x1 * S11 * P1**2
-         + 2 * np.sqrt(x1 * x2) * S12 * P1 * P2)
-    return I
