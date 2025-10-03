@@ -2,7 +2,6 @@ import numpy as np
 from abc import ABC, abstractmethod
 from structurefactor import StructureFactor
 from formfactor import Sphere
-from utils import _binary_mixture_intensity
 import matplotlib.pyplot as plt
 
 class Intensity(ABC):
