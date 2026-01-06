@@ -10,10 +10,8 @@ import numpy as np
 import torch
 
 import sys
-repo_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(repo_root))
-
-from gsd2sas.structurefactor import StructureFactor
+sys.path.append('/mmfs1/gscratch/zeelab/hanson/codes/DNA_lipid_silica/gsd2sas/gsd2sas')
+from structurefactor import StructureFactor
 from sasintensity import SphereIntensity
 
 
