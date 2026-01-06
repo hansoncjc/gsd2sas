@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import os
 import time
 from pathlib import Path
 
@@ -24,6 +25,8 @@ FRAMES = 'all'
 def _run_device(label, device_str):
     device = torch.device(device_str)
     dtype = torch.float64
+
+    print(f"[{label}] start on device={device}")
 
     au = SphereIntensity(volume_fraction=0.01, sld_sample=118e-6, sld_solvent=9.44e-6)
     au.set_form_factor(radius=1)
@@ -55,10 +58,17 @@ def _run_device(label, device_str):
     plt.savefig(out_path)
     plt.close()
 
-    print(f"Device: {device}, time: {t1 - t0:.6f} s, output: {out_path}")
+    print(f"[{label}] Device: {device}, time: {t1 - t0:.6f} s, output: {out_path}")
+    print(f"[{label}] end")
 
 
 def main():
+    print("CUDA available:", torch.cuda.is_available())
+    print("torch.version.cuda:", torch.version.cuda)
+    print("device count:", torch.cuda.device_count())
+    print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
+    print("")
+
     ctx = mp.get_context("spawn")
     procs = []
 
