@@ -1,18 +1,29 @@
 import numpy as np
+from collections import deque
 
 def read_configuration(position_file, frames = 'all'):
     """
     Parameters
     ----------
-    frames : int | Iterable[int] | 'all'
-        Which frame indices to read from the file.
+    frames : int | Iterable[int] | 'all' | 'last:N'
+        Which frame indices to read from the file. Use 'last:N' for the last N frames.
     Returns
     -------
     x   : (F, N, 3) float64   positions for each requested frame
     box : (F, 3)     float64   box lengths for each frame
     """
     
-    if frames == 'all':
+    last_n = None
+    if isinstance(frames, str) and frames.startswith('last:'):
+        try:
+            last_n = int(frames.split(':', 1)[1])
+        except ValueError as exc:
+            raise ValueError(f"Invalid frames specifier: {frames}") from exc
+        if last_n <= 0:
+            raise ValueError("last:N must be a positive integer.")
+        read_all = False
+        target = None
+    elif frames == 'all':
         read_all = True
         target = None
     elif isinstance(frames, int):
@@ -23,7 +34,11 @@ def read_configuration(position_file, frames = 'all'):
         target = set(frames)
 
 
-    x_list, box_list = [], []
+    if last_n is not None:
+        x_list = deque(maxlen=last_n)
+        box_list = deque(maxlen=last_n)
+    else:
+        x_list, box_list = [], []
     with open(position_file) as f:
         frame_idx = 0
         while True:
@@ -35,13 +50,16 @@ def read_configuration(position_file, frames = 'all'):
             #_     = f.readline()            # blank line
             #_     = f.readline()            # blank line
 
-            if read_all or frame_idx in target:
+            if last_n is not None:
+                x_list.append(pos.copy())
+                box_list.append(box.copy())
+            elif read_all or frame_idx in target:
                 x_list.append(pos.copy())
                 box_list.append(box.copy())
             frame_idx += 1
-            if not read_all and frame_idx > max(target):
+            if last_n is None and (not read_all) and frame_idx > max(target):
                 break
-    return np.stack(x_list), np.stack(box_list)
+    return np.stack(list(x_list)), np.stack(list(box_list))
             
 def cell_list(x, box, rmax):
     """
@@ -80,4 +98,3 @@ def cell_list(x, box, rmax):
 
 def load_types(types_file):
     return np.loadtxt(types_file)
-
