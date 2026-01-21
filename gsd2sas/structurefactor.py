@@ -242,7 +242,7 @@ def compute_partial_s_1d(x, types, box, N_grid, device=None, dtype=None):
     )
 
 class StructureFactor:
-    def __init__(self, gsd_path, N_grid, types=None, frames='all', device=None, dtype=None):
+    def __init__(self, gsd_path, N_grid, types=None, frames='last:5', device=None, dtype=None):
         self.gsd_path = gsd_path
         self.N_grid = N_grid
         self.frames = frames
