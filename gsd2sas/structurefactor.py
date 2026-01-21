@@ -55,60 +55,6 @@ def compute_s_3d(x, box, N_grid, device=None, dtype=None):
     S_3, n_grid_vec = _compute_s_3d_torch(x, box, N_grid, device=device, dtype=dtype)
     return S_3.cpu().numpy(), n_grid_vec.cpu().numpy()
 
-def _compute_partial_s_3d_torch(x, types, box, N_grid, device=None, dtype=None):
-    assert x.ndim == 2 and x.shape[1] == 3, f"Expected x=(N,3), got {x.shape}"
-    assert np.shape(box) == (3,), f"Expected box=(3,), got {np.shape(box)}"
-    if dtype is None:
-        dtype = torch.float64
-    x_t = torch.as_tensor(x, dtype=dtype, device=device)
-    box_t = torch.as_tensor(box, dtype=dtype, device=device)
-    types_t = torch.as_tensor(types, device=x_t.device)
-
-    L_grid = torch.min(box_t) / N_grid
-    n_grid_vec = torch.round(box_t / L_grid).to(torch.int64)
-    L_grid = box_t / n_grid_vec.to(dtype)
-
-    cells, _ = _torch_cell_list(x_t, box_t, rmax=L_grid)
-    shape = (int(n_grid_vec[0]), int(n_grid_vec[1]), int(n_grid_vec[2]))
-
-    mask1 = types_t == 0
-    mask2 = types_t == 1
-    cells1 = cells[mask1]
-    cells2 = cells[mask2]
-
-    xgrid_1 = torch.zeros(shape, dtype=dtype, device=x_t.device)
-    xgrid_2 = torch.zeros(shape, dtype=dtype, device=x_t.device)
-    if cells1.numel() > 0:
-        ones1 = torch.ones((cells1.shape[0],), dtype=dtype, device=x_t.device)
-        xgrid_1.index_put_((cells1[:, 0], cells1[:, 1], cells1[:, 2]), ones1, accumulate=True)
-    if cells2.numel() > 0:
-        ones2 = torch.ones((cells2.shape[0],), dtype=dtype, device=x_t.device)
-        xgrid_2.index_put_((cells2[:, 0], cells2[:, 1], cells2[:, 2]), ones2, accumulate=True)
-
-    N1 = mask1.sum().to(dtype)
-    N2 = mask2.sum().to(dtype)
-
-    E1 = torch.fft.fftshift(torch.fft.fftn(xgrid_1))
-    E2 = torch.fft.fftshift(torch.fft.fftn(xgrid_2))
-
-    S_3_11 = torch.abs(E1) ** 2 / N1
-    S_3_22 = torch.abs(E2) ** 2 / N2
-    S_3_12 = torch.real(E1 * torch.conj(E2)) / torch.sqrt(N1 * N2)
-
-    return S_3_11, S_3_22, S_3_12, n_grid_vec
-
-def compute_partial_s_3d(x, types, box, N_grid, device=None, dtype=None):
-    S_3_11, S_3_22, S_3_12, n_grid_vec = _compute_partial_s_3d_torch(
-        x, types, box, N_grid, device=device, dtype=dtype
-    )
-    return (
-        S_3_11.cpu().numpy(),
-        S_3_22.cpu().numpy(),
-        S_3_12.cpu().numpy(),
-        n_grid_vec.cpu().numpy(),
-    )
-
-
 def _compute_q3_grid_torch(box, N_grid, device=None, dtype=None):
     """
     Compute the 3D grid of q-vectors for a given configuration.
@@ -187,66 +133,11 @@ def compute_s_1d(x, box, N_grid, device=None, dtype=None):
 
     return q_bin_centers.cpu().numpy(), num_1.cpu().numpy(), cnt_1.cpu().numpy()
 
-def compute_partial_s_1d(x, types, box, N_grid, device=None, dtype=None):
-    """
-    Compute 1D radially averaged partial structure factors S_11(q), S_22(q), S_12(q)
-    from particle positions and types.
-
-    Parameters
-    ----------
-    x : np.ndarray
-        (N, 3) particle positions.
-    types : np.ndarray
-        (N,) array of particle types (e.g., 0 and 1).
-    box : array-like
-        (3,) simulation box dimensions.
-    N_grid : int
-        Number of grid points in the smallest box dimension.
-
-    Returns
-    -------
-    q_bin_centers : np.ndarray
-        Centers of q bins (|q| magnitudes).
-    S_11_1d, S_22_1d, S_12_1d : np.ndarray
-        Radially averaged partial structure factors.
-    """
-    if dtype is None:
-        dtype = torch.float64
-    S_3_11_t, S_3_22_t, S_3_12_t, _ = _compute_partial_s_3d_torch(
-        x, types, box, N_grid, device=device, dtype=dtype
-    )
-    q_3_x_t, q_3_y_t, q_3_z_t = _compute_q3_grid_torch(box, N_grid, device=device, dtype=dtype)
-    q_1 = torch.sqrt(q_3_x_t ** 2 + q_3_y_t ** 2 + q_3_z_t ** 2).reshape(-1)
-
-    S_3_11_t = S_3_11_t.reshape(-1)
-    S_3_22_t = S_3_22_t.reshape(-1)
-    S_3_12_t = S_3_12_t.reshape(-1)
-
-    box_t = torch.as_tensor(box, dtype=dtype, device=device)
-    dq = torch.mean(2 * np.pi / box_t)
-    q_min = torch.min(q_1)
-    q_max = torch.max(q_1)
-    q_binedge = torch.arange(q_min, q_max + dq, dq, dtype=dtype, device=device)
-    q_bin_centers = 0.5 * (q_binedge[:-1] + q_binedge[1:])
-
-    S11_sum, cnt = _torch_binned_sum_count(S_3_11_t, q_1, q_binedge)
-    S22_sum, _ = _torch_binned_sum_count(S_3_22_t, q_1, q_binedge)
-    S12_sum, _ = _torch_binned_sum_count(S_3_12_t, q_1, q_binedge)
-
-    return (
-        q_bin_centers.cpu().numpy(),
-        S11_sum.cpu().numpy(),
-        S22_sum.cpu().numpy(),
-        S12_sum.cpu().numpy(),
-        cnt.cpu().numpy(),
-    )
-
 class StructureFactor:
-    def __init__(self, gsd_path, N_grid, types=None, frames='last:5', device=None, dtype=None):
+    def __init__(self, gsd_path, N_grid, frames='last:5', device=None, dtype=None):
         self.gsd_path = gsd_path
         self.N_grid = N_grid
         self.frames = frames
-        self.types = types
         self.device = device
         self.dtype = dtype if dtype is not None else torch.float64
         self._extract_data()
@@ -263,82 +154,29 @@ class StructureFactor:
             yield x_frame, box_frame
 
     def compute_s_3d(self):
-        if self.types is None:
-            s_accum, n = None, 0
-            for x, box in self._iter_frames(self.frames):
-                s_i, _ = compute_s_3d(x, box, self.N_grid, device=self.device, dtype=self.dtype)
-                if s_accum is None:
-                    s_accum = np.zeros_like(s_i)
-                s_accum += s_i
-                n += 1
-            return s_accum / n
-        else:
-            s11_accum, s22_accum, s12_accum = None, None, None
-            n = 0
-            for x, box in self._iter_frames(self.frames):
-                s11_i, s22_i, s12_i, _ = compute_partial_s_3d(
-                    x, self.types, box, self.N_grid, device=self.device, dtype=self.dtype
-                )
-                if s11_accum is None:
-                    s11_accum = np.zeros_like(s11_i)
-                    s22_accum = np.zeros_like(s22_i)
-                    s12_accum = np.zeros_like(s12_i)
-                s11_accum += s11_i
-                s22_accum += s22_i
-                s12_accum += s12_i
-                n += 1
-            return s11_accum / n, s22_accum / n, s12_accum / n
+        s_accum, n = None, 0
+        for x, box in self._iter_frames(self.frames):
+            s_i, _ = compute_s_3d(x, box, self.N_grid, device=self.device, dtype=self.dtype)
+            if s_accum is None:
+                s_accum = np.zeros_like(s_i)
+            s_accum += s_i
+            n += 1
+        return s_accum / n
 
     def compute_s_1d(self):
         num_total, cnt_total = None, None
-        if self.types is None:
-            for x, box in self._iter_frames(self.frames):
-                q, num_i, cnt_i = compute_s_1d(x, box, self.N_grid, device=self.device, dtype=self.dtype)
-                if num_total is None:
-                    num_total = np.zeros_like(num_i)
-                    cnt_total = np.zeros_like(cnt_i)
-                num_total += num_i
-                cnt_total += cnt_i
-            S1d = np.divide(num_total, cnt_total,
-                    out=np.zeros_like(num_total),
-                    where=cnt_total > 0)
-            print(f'Total frames processed: {len(self.x)}')
-            return q, S1d
-
-        else:
-            S11_sum_total = None
-            S22_sum_total = None
-            S12_sum_total = None
-            cnt_total     = None
-            q_bin         = None
-            nframes       = 0
-
-            for x, box in self._iter_frames(self.frames):
-                q, S11_sum_i, S22_sum_i, S12_sum_i, cnt_i = compute_partial_s_1d(
-                    x, self.types, box, self.N_grid, device=self.device, dtype=self.dtype
-                )
-                if S11_sum_total is None:
-                    # initialize accumulators on first frame
-                    S11_sum_total = np.zeros_like(S11_sum_i)
-                    S22_sum_total = np.zeros_like(S22_sum_i)
-                    S12_sum_total = np.zeros_like(S12_sum_i)
-                    cnt_total     = np.zeros_like(cnt_i)
-                    q_bin         = q  # keep the bin centers from the first frame
-
-                S11_sum_total += S11_sum_i
-                S22_sum_total += S22_sum_i
-                S12_sum_total += S12_sum_i
-                cnt_total     += cnt_i
-                nframes       += 1
-
-            # safe divide to produce final per-bin averages
-            s11 = np.divide(S11_sum_total, cnt_total, out=np.zeros_like(S11_sum_total), where=cnt_total > 0)
-            s22 = np.divide(S22_sum_total, cnt_total, out=np.zeros_like(S22_sum_total), where=cnt_total > 0)
-            s12 = np.divide(S12_sum_total, cnt_total, out=np.zeros_like(S12_sum_total), where=cnt_total > 0)
-
-            print(f'Total frames processed: {nframes}')
-            self.q_bin, self.s_11, self.s_22, self.s_12 = q_bin, s11, s22, s12
-            return self.q_bin, self.s_11, self.s_22, self.s_12
+        for x, box in self._iter_frames(self.frames):
+            q, num_i, cnt_i = compute_s_1d(x, box, self.N_grid, device=self.device, dtype=self.dtype)
+            if num_total is None:
+                num_total = np.zeros_like(num_i)
+                cnt_total = np.zeros_like(cnt_i)
+            num_total += num_i
+            cnt_total += cnt_i
+        S1d = np.divide(num_total, cnt_total,
+                out=np.zeros_like(num_total),
+                where=cnt_total > 0)
+        print(f'Total frames processed: {len(self.x)}')
+        return q, S1d
 
     def compute_q3_grid(self, frame = 0):
         x0  = self.x[frame]
