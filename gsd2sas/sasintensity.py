@@ -19,8 +19,8 @@ class Intensity(ABC):
         self.delta_rho = self.sld_sample - self.sld_solvent
         return self.volume_fraction * self.delta_rho**2
 
-    def set_structure_factor(self, gsd_path, N_grid, frames='all'):
-        self.structure_factor = StructureFactor(gsd_path, N_grid, self.types, frames)
+    def set_structure_factor(self, gsd_path, N_grid, frames='all', device=None, dtype=None):
+        self.structure_factor = StructureFactor(gsd_path, N_grid, self.types, frames, device=device, dtype=dtype)
 
     @abstractmethod
     def set_form_factor(self, *args, **kwargs):
