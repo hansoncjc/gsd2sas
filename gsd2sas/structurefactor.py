@@ -78,8 +78,8 @@ def _compute_q3_grid_torch(box, N_grid, device=None, dtype=None):
         dtype = torch.float64
     box_t = torch.as_tensor(box, dtype=dtype, device=device)
 
-    rmax = torch.min(box_t) / N_grid
-    _, ncell = _torch_cell_list(torch.zeros((1, 3), dtype=dtype, device=box_t.device), box_t, rmax=rmax)
+    L_grid = torch.min(box_t) / N_grid
+    ncell = torch.round(box_t / L_grid).to(torch.int64)
 
     dq = 2 * np.pi / box_t
 
